@@ -1,0 +1,15 @@
+-Descomposicion recursiva
+-Uso de sends y receive (sends no bloqueante, receive bloqueante)
+-Balance de carga medio malo
+-Master se encarga de autorizar o no el uso de un nuevo nodo, los workers antes de ver si llaman a 
+otro nodo le mandan al master su profundidad y se bloquean, el master recibe las profundidades
+y trata de repartir a las profundidades menores (aquellas que tienen mas volumen de datos)
+los nodos que aún están libres. Les envia un si o un no, dependiendo de eso los workers
+largan una parte de su arreglo a otro nodo, o se encargan completamente de su parte
+-Hay que hacerlo escalable para que se pueda usar N cantidad de nodos? Pero al aumentar los 
+nodos, llega un punto que no va a ser proporcionalmente más rápido, también debería aumentar 
+la cantidad de datos a procesar.
+-Hay que tener en cuenta el tamaño del arreglo recibido para ver hasta cuando vale la
+pena usar más nodos
+-Considerar dividir el arreglo en n partes, y que cada uno ordene su parte. Despues, usar
+un merge para mezclar los subarreglos y ahi obtener el final
