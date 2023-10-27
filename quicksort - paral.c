@@ -53,6 +53,15 @@ void main(int argc, char **argv[])
     int nworkers = nproc - 1;                              // nro workers
     int dimworker = (int)(dim / nworkers);                 // cant de elem para cada worker
     int dimbigworker = dim - (dimworker * (nworkers - 1)); // cant de elem para big worker
+    //int color;
+    //MPI_Comm commWorkersNormales;
+    //comunicador para workers con igual dimensión
+    //if(myId<nworkers) color=1;
+    //MPI_Comm_split(MPI_COMM_WORLD, color, myId, &commWorkersNormales);
+
+    int vectRecibidos[nworkers][dimbigworker];
+
+
     if (myId == 0)
     {
         // leer el arreglo
@@ -94,9 +103,35 @@ void main(int argc, char **argv[])
                     refindex++;
                 }
                 MPI_Isend(&auxvect, dimworker, MPI_INT, i, i, MPI_COMM_WORLD);
+
             }
         }
         // reconstruir el arreglo pero ordenado xd
+        for(int i=1; i<nworkers; i++){
+            MPI_Recv(&vectRecibidos[i-1][0], dimworker, MPI_INT, i, i, MPI_COMM_WORLD, &status);
+        }
+        MPI_Recv(&vectRecibidos[nworkers-1][0], dimbigworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD, &status);
+
+        if(nworkers%2){
+
+            for(int i=nworkers/2; i>=1, i--){
+                
+                if(i==(nworkers/2)){
+                    MPI_Isend(&vectRecibidos[((2*i)-2)][0], dimworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD);
+                    MPI_Isend(&vectRecibidos[((2*i)-1)][0], dimbigworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD);
+                }else{
+                    MPI_Isend(&vectRecibidos[((2*i)-1)][0], dimworker, MPI_INT, i+1, i+1, MPI_COMM_WORLD);
+                    MPI_Isend(&vectRecibidos[((2*i)-2)][0], dimworker, MPI_INT, i+1, i+1, MPI_COMM_WORLD);
+                }                
+            }
+        }else{
+            //si es impar se envían el arreglo del worker que más labura se une con la unión de las demás listas en el master
+        }
+
+        /*
+        TODO pensar como utilizar matriz dinámica para recibir los datos de los nodos al hacer la unión de las listas ordenadas
+        
+        */
     }
     else if (myId < nworkers) // codigo worker normal
     {
