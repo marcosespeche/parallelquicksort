@@ -103,14 +103,21 @@ void main(int argc, char **argv[])
         int vectworker[dimworker];
 
         MPI_Recv(&vectworker, dimworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
+
+        quicksort(vectworker, 0, (dimworker - 1));
+
+        MPI_Send(&vectworker, dimworker, MPI_INT, 0, myId, MPI_COMM_WORLD);
     }
     else if (myId == nworkers) // codigo big worker
     {
         int vectworker[dimbigworker];
-        MPI_Recv(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
-    }
 
-    quicksort(vect, 0, dim - 1);
+        MPI_Recv(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
+
+        quicksort(vectworker, 0, (dimbigworker - 1));
+
+        MPI_Send(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD);
+    }
 
     printf("\nArreglo sorteado:\n");
 
