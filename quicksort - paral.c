@@ -67,16 +67,14 @@ void main(int argc, char **argv[])
         {
             printf(" %d ", vect[i]);
         }
-        // dividir el arreglo
-        // 130/9=14
 
-        int refindex = 0;
+        int refindex = 0; // indice de referencia para poder recorrer el arreglo total
 
-        for (int i = 1; i < nproc; i++)
+        for (int i = nworkers; i >= 1; i--)
         {
 
             // Codigo para enviar al worker que labura mas
-            if (i == nproc - 1)
+            if (i == nworkers)
             {
                 int auxvect[dimbigworker];
                 for (int j = 0; j < dimbigworker; j++)
@@ -100,13 +98,13 @@ void main(int argc, char **argv[])
         }
         // reconstruir el arreglo pero ordenado xd
     }
-    else if (myId < nproc) // codigo worker normal
+    else if (myId < nworkers) // codigo worker normal
     {
         int vectworker[dimworker];
 
         MPI_Recv(&vectworker, dimworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
     }
-    else if (myId == nproc) // codigo big worker
+    else if (myId == nworkers) // codigo big worker
     {
         int vectworker[dimbigworker];
         MPI_Recv(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
