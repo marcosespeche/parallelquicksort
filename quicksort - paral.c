@@ -50,26 +50,11 @@ void main(int argc, char **argv[])
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &myId);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
-    int dim = argc - 1;                                    // cantidad de nros del arreglo
-    int nworkers = nproc - 1;                              // nro workers
-    int dimworker = (int)(dim / nworkers);                 // cant de elem para cada worker
-    int dimbigworker = dim - (dimworker * (nworkers - 1)); // cant de elem para big worker
-    // int color;
-    // MPI_Comm commWorkersNormales;
-    // comunicador para workers con igual dimensión
-    // if(myId<nworkers) color=1;
-    // MPI_Comm_split(MPI_COMM_WORLD, color, myId, &commWorkersNormales);
+    int dim = argc - 1;                    // cantidad de nros del arreglo
+    int nworkers = nproc - 1;              // nro workers
+    int dimworker = (int)(dim / nworkers); // cant de elem para cada worker
     double resultado = ceil((log(nworkers) / log(2)));
     int cantvueltas = (int)resultado;
-    // lo anterior seria reemplazado por ceil
-    int vectRecibidos[nworkers][dimbigworker]; // filas = cant workers, columnas = maxdim de cada sub arreglo
-    // definir las matrices que se usarán en cada vuelta, tenemos la cantidad de vueltas y la cantidad de filas de c/u
-    int *ptrmatrx[cantvueltas];
-    for (int i = 0; i < cantvueltas; i++)
-    {
-        int matriz[nworkers][dimbigworker];
-        ptrmatrx[i] = &matriz;
-    }
 
     if (myId == 0)
     {
@@ -79,85 +64,65 @@ void main(int argc, char **argv[])
         {
             vect[i] = atoi(argv[i + 1]);
         }
-        printf("Arreglo Inicial:\n");
-        for (int i = 0; i < dim; i++)
-        {
-            printf(" %d ", vect[i]);
-        }
 
         int refindex = 0; // indice de referencia para poder recorrer el arreglo total
 
         for (int i = nworkers; i >= 1; i--) // enviar porciones de arreglo a los workers, primero mandamos la porcion mas grande
         {
-
-            // Codigo para enviar al worker que labura mas
-            if (i == nworkers)
+            int auxvect[dimworker];
+            for (int j = 0; j < dimworker; j++)
             {
-                int auxvect[dimbigworker];
-                for (int j = 0; j < dimbigworker; j++)
-                {
-                    auxvect[j] = vect[refindex];
-                    refindex++;
-                }
-                MPI_Isend(&auxvect, dimbigworker, MPI_INT, i, i, MPI_COMM_WORLD);
+                auxvect[j] = vect[refindex];
+                refindex++;
             }
-            // Codigo para el resto de workers
-            else
-            {
-                int auxvect[dimworker];
-                for (int j = 0; j < dimworker; j++)
-                {
-                    auxvect[j] = vect[refindex];
-                    refindex++;
-                }
-                MPI_Isend(&auxvect, dimworker, MPI_INT, i, i, MPI_COMM_WORLD);
-            }
+            MPI_Isend(&auxvect, dimworker, MPI_INT, i, i, MPI_COMM_WORLD);
         }
-        // reconstruir el arreglo pero ordenado xd
+        // reconstruir el arreglo, ordenandolo
         // la reconstruccion del arreglo se hara en n vueltas, que se calculan al principio en base a la cant de workers totales
         // ya que esa cant de workers totales es la cantidad de filas desde la cual debemos partir, hasta llegar a 1
+        int cantfilas = nworkers;
+        int cantcolumnas = dimworker;
+
+        int *matriz = (int *)malloc(cantfilas * cantcolumnas * sizeof(int));
+
         for (int v = 0; v < cantvueltas; v++)
         {
-            // ir definiendo la matriz con el nro de filas variable, usando variables que esten afuera del for de v
-            //  usar malloc, y al final de la iteración, usar free
-            for (int i = 1; i < nworkers; i++) // recibir cositas
+
+            for (int i = 0; i < cantfilas; i++) // recibir elementos de los workers
             {
-                MPI_Recv(&vectRecibidos[i - 1][0], dimworker, MPI_INT, i, i, MPI_COMM_WORLD, &status);
+                int offset = i * cantcolumnas;
+                MPI_Recv(matriz[offset], cantcolumnas, MPI_INT, (i + 1), (i + 1), MPI_COMM_WORLD, &status);
             }
-            MPI_Recv(&vectRecibidos[nworkers - 1][0], dimbigworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD, &status);
 
-            if (!(nworkers % 2)) // caso en el que hay cantidad par de workers, ojo con la condicion(revisar)
+            int proxfilas = 0;
+            if (cantfilas % 2 == 0)
             {
-
-                for (int i = (nworkers / 2); i >= 1, i--)
-                {
-
-                    if (i == (nworkers / 2)) // esto enviará al big worker
-                    {
-                        MPI_Isend(&vectRecibidos[((2 * i) - 2)][0], dimworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD);
-                        MPI_Isend(&vectRecibidos[((2 * i) - 1)][0], dimbigworker, MPI_INT, nworkers, nworkers, MPI_COMM_WORLD); // aca viene a parar la fila del worker grande
-                    }
-                    else // envía al resto de los workers, no se usan todos
-                    {
-                        MPI_Isend(&vectRecibidos[((2 * i) - 1)][0], dimworker, MPI_INT, i + 1, i + 1, MPI_COMM_WORLD); // por que ese i+1?
-                        MPI_Isend(&vectRecibidos[((2 * i) - 2)][0], dimworker, MPI_INT, i + 1, i + 1, MPI_COMM_WORLD);
-                    }
-                }
+                proxfilas = (cantfilas / 2);
             }
             else
             {
-                // si es impar se envían el arreglo del worker que más labura se une con la unión de las demás listas en el master
+                proxfilas = (int)(cantfilas / 2);
+                proxfilas += 1;
             }
 
-            /*
-            TODO pensar como utilizar matriz dinámica para recibir los datos de los nodos al hacer la unión de las listas ordenadas
-
-            */
-            // aca iria el free
+            // queremos enviar elementos a los workers, las filas se envían de a pares
+            // para poder calcular el offset de cada una, incrementamos i en 2 unidades por cada iteración
+            // por eso multiplicamos a proxfilas por 2, para que haya una cantidad de iteraciones = proxfilas
+            int workerid = 1;
+            for (int i = 0; i < (2 * proxfilas); i += 2) // enviar elementos a los workers, ACA PUEDE HABER ERROR CON PROXFILAS
+            {
+                int offset = i * cantcolumnas;
+                MPI_Isend(matriz[offset], cantcolumnas, MPI_INT, workerid, workerid, MPI_COMM_WORLD);
+                MPI_Isend(matriz[offset + cantcolumnas], cantcolumnas, MPI_INT, workerid, workerid, MPI_COMM_WORLD);
+                workerid++;
+            }
+            cantfilas = proxfilas;
+            cantcolumnas = cantcolumnas * 2;
+            matriz = (int *)realloc(matriz, cantfilas * cantcolumnas * sizeof(int));
         }
         // codigo para mandar el arreglo ordenado a un archivo
     }
-    else if (myId < nworkers) // codigo worker normal
+    else // codigo worker
     {
         // poner variables para que los workers sepan cuanto van a recibir y cuantas veces van a recibir
         // esas cosas las pueden calcular, ya saben la cantvueltas y nworkers
@@ -168,18 +133,18 @@ void main(int argc, char **argv[])
         quicksort(vectworker, 0, (dimworker - 1));
 
         MPI_Send(&vectworker, dimworker, MPI_INT, 0, myId, MPI_COMM_WORLD);
+        // malloc inicial
+        for (int v = 0; v < cantvueltas; ++)
+        {
+            // recibir
+            // combinacion
+            // mandar
+            // calcular nuevos tamaños de fila y col
+            // realloc
+        }
     }
-    else if (myId == nworkers) // codigo big worker
-    {
-        int vectworker[dimbigworker];
 
-        MPI_Recv(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD, &status);
-
-        quicksort(vectworker, 0, (dimbigworker - 1));
-
-        MPI_Send(&vectworker, dimbigworker, MPI_INT, 0, myId, MPI_COMM_WORLD);
-    }
-
+    // Arreglo ya ordenado
     printf("\nArreglo sorteado:\n");
 
     for (int i = 0; i < dim; i++)
