@@ -45,7 +45,8 @@ void quicksort(int vect[], int indInic, int indFinal)
         quicksort(vect, pi + 1, indFinal);
     }
 }
-
+// el nro de elementos debe ser mulitplo de la cantidad de workers
+// la cantidad de workers debe ser potencia de 2
 int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
@@ -59,6 +60,7 @@ int main(int argc, char *argv[])
     double resultado = ceil((log(nworkers) / log(2)));
     int cantvueltas = (int)resultado;
     int i = 0, j = 0, v = 0;
+
     if (myId == 0) // codigo master
     {
         // leer el arreglo
@@ -110,27 +112,19 @@ int main(int argc, char *argv[])
                 MPI_Recv(&matriz[offset], cantcolumnas, MPI_INT, (i + 1), (i + 1), MPI_COMM_WORLD, &status);
             }
 
-            int proxfilas = 0;
-            if (cantfilas % 2 == 0)
-            {
-                proxfilas = (cantfilas / 2);
-            }
-            else
-            {
-                proxfilas = (int)(cantfilas / 2);
-                proxfilas += 1;
-            }
+            int proxfilas = (cantfilas / 2);
 
-            // queremos enviar elementos a los workers, las filas se envían de a pares
-            // para poder calcular el offset de cada una, incrementamos i en 2 unidades por cada iteración
-            // por eso multiplicamos a proxfilas por 2, para que haya una cantidad de iteraciones = proxfilas
+            int cantworkers = (int)(cantfilas / 2);
+
             int workerid = 1;
-            for (i = 0; i < (2 * proxfilas); i += 2) // enviar elementos a los workers, ACA PUEDE HABER ERROR CON PROXFILAS
+            int duplafilas = 0;               // esto se utiliza para identificar cada dupla de filas que se enviará
+            for (i = 0; i < cantworkers; i++) // iteramos por cada worker que debe recibir una dupla de filas para combinarlas
             {
-                int offset = i * cantcolumnas;
+                int offset = duplafilas * cantcolumnas;
                 MPI_Isend(&matriz[offset], cantcolumnas, MPI_INT, workerid, workerid, MPI_COMM_WORLD, &request);
                 MPI_Isend(&matriz[offset + cantcolumnas], cantcolumnas, MPI_INT, workerid, workerid, MPI_COMM_WORLD, &request);
                 workerid++;
+                duplafilas = duplafilas + 2;
             }
             cantfilas = proxfilas;
             cantcolumnas = cantcolumnas * 2;
@@ -140,7 +134,6 @@ int main(int argc, char *argv[])
         MPI_Recv(&matriz[0], cantcolumnas, MPI_INT, 1, 1, MPI_COMM_WORLD, &status);
         double tiempofinal = MPI_Wtime();
         double tiempoejecucion = tiempofinal - tiempoinicio;
-        MPI_Finalize();
         // codigo para mandar el arreglo ordenado a un archivo
         if (!(fileptr = fopen(nomarchv, "w")))
         {
@@ -152,10 +145,11 @@ int main(int argc, char *argv[])
         fprintf(fileptr, "Tiempo de ejecucion: %fs\n", tiempoejecucion);
         for (i = 0; i < dim; i++)
         {
-            fprintf(fileptr, "%d ", vect[i]);
+            fprintf(fileptr, "%d ", matriz[i]);
         }
         fclose(fileptr);
-        return 0;
+        free(matriz);
+        MPI_Finalize();
     }
     else // codigo worker
     {
@@ -186,6 +180,15 @@ int main(int argc, char *argv[])
         }
         for (v = 0; v < cantvueltas; v++)
         {
+            int limiteworker = nworkers;
+            for (h = 0; h <= v; h++)
+            {
+                limiteworker = limiteworker / 2;
+            }
+            if (myId > limiteworker)
+            {
+                break;
+            }
             // recibir las 2 filas
             MPI_Recv(fila1, cantcolumnas, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
             MPI_Recv(fila2, cantcolumnas, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -239,6 +242,7 @@ int main(int argc, char *argv[])
             }
             cantfilas = proxfilas;
             cantcolumnas = 2 * cantcolumnas;
+            // realloc
             fila1 = (int *)realloc(fila1, cantcolumnas * sizeof(int));
             if (fila1 == NULL)
             {
@@ -254,6 +258,11 @@ int main(int argc, char *argv[])
             {
                 printf("Error realloc filaresultado vuelta %d", v);
             }
-        }
+        } // end for vueltas
+        free(fila1);
+        free(fila2);
+        free(filaresultado);
+        MPI_Finalize();
     }
+    return 0;
 }
